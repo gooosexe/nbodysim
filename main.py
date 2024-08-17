@@ -5,16 +5,20 @@ pygame.init()
 screen = pygame.display.set_mode((800, 600))
 clock = pygame.time.Clock()
 
+# constants
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
+G = 0.000000000066743 # gravitational constant
 
 # each pixel is one meter
+# mass in kg
 
 class Body:
-	def __init__(self, pos, vel, acc, mass=1):
+	def __init__(self, pos, vel, acc, mass=1000000000000000):
 		self.pos = pos
 		self.vel = vel
 		self.acc = acc
+		self.mass = mass
 
 	def update(self, dt):
 		self.vel += self.acc * dt
@@ -29,11 +33,19 @@ velVec = pygame.Vector2(0, 0)
 running = True
 dt = 0
 
+
 def drawText(text, x, y):
 	textSurface = font.render(text, False, WHITE)
 	screen.blit(textSurface, (x, y))
 
+def checkCollision(body1, body2):
+	dist = body1.pos.distance_to(body2.pos)
+	if dist < 10:
+		return True
+	return
+
 while running:
+	# event polling
 	for event in pygame.event.get():
 		if event.type == pygame.QUIT:
 			running = False
@@ -49,9 +61,33 @@ while running:
 
 	screen.fill(BLACK)
 
+	# update and draw bodies
 	for body in bodies:
+		if body.pos[0] < -1000 or body.pos[0] > 1000 or body.pos[1] < -1000 or body.pos[1] > 1000:
+			bodies.remove(body)
+			continue
+		# calculate gravitational force to every other body and update acceleration
+		body.acc = pygame.Vector2(0, 0)	
+		for otherBody in bodies:
+			
+			if body != otherBody:
+				# calculate the direction vector
+				dirVec = otherBody.pos - body.pos
+				# calculate the distance between the two bodies
+				dist = dirVec.length()
+				# calculate the force
+				force = dirVec.normalize() * (G * body.mass * otherBody.mass) / (dist ** 2)
+				acc = force / body.mass
+				body.acc += acc
+
+				if checkCollision(body, otherBody):
+					body.pos.distance_to(otherBody.pos)
+					bodies.remove(otherBody)
+					bodies.remove(body)
+					continue
+				
 		body.update(dt)
-		pygame.draw.circle(screen, WHITE, body.pos, 10)
+		pygame.draw.circle(screen, WHITE, body.pos, 10.0)
 
 	keys = pygame.key.get_pressed()
 	mouseState = pygame.mouse.get_pressed()
@@ -63,8 +99,10 @@ while running:
 		pygame.draw.line(screen, WHITE, curPos, pygame.Vector2(curPos[0] + velVec[0], curPos[1] + velVec[1]), 2)
 		drawText(str(round(velVec.length(), 2)) + "m/s", 10, 10)
 
+	drawText(str(round(clock.get_fps(), 1)), 10, 30)
+
 	pygame.display.flip()
-	# delta time since last frame
+	# delta time since last frame in seconds
 	dt = clock.tick(60) / 1000
 
 pygame.quit()
