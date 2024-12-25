@@ -1,116 +1,81 @@
-import pygame
-import numpy
+import matplotlib.pyplot as plt
+from matplotlib import animation, colors, colormaps
+import numpy as np
+from body import Body
 
-# initializations
-pygame.init()
-screen = pygame.display.set_mode((800, 600))
-clock = pygame.time.Clock()
-
-# constants
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-G = 0.000000000066743 # gravitational constant
-
-# TODO
-# 1. add semi-elastic collisions
-# 2. add a separate window for changing body properties
-
-# each pixel is one meter
+# Simulation scale:
+# 1 pixel per million km
 # mass in kg
 
-class Body:
-    def __init__(self, pos, vel, acc=pygame.Vector2(0,0), mass=1*10**16):
-        self.pos = pos
-        self.vel = vel
-        self.acc = acc
-        self.mass = mass
-
-    def update(self, dt):
-        self.vel += self.acc * dt
-        self.pos += self.vel * dt
-
-# global variables
-bodies = [
-        Body(pygame.Vector2(300, 300), pygame.Vector2(120, 0), pygame.Vector2(0,0), 1*10**10),
-        Body(pygame.Vector2(300, 350), pygame.Vector2(0, 0)),
-        ] # list of bodies
-font = pygame.font.SysFont('Arial', 20)
-mouseState = 0 # 0 = unpressed, 1 = pressed
-curPos = pygame.Vector2(0, 0)
-velVec = pygame.Vector2(0, 0)
-running = True
-dt = 0
+# Test 1: simulation of 500 bodies with the same mass and radius
+TSTEP = 1e3 # 1 million seconds per step
+SIM_SPEED = 1 # 8 steps per frame
+SIM_LEN = 1000
+G = 6.67430e-11
+BODIES = 10 
+MASS = 1e24 # 1 septillion kg, roughly 1/5 of earth
+RADIUS = 1e6 # 1 million meters, roughly 1/6 of earth
+SOFT_PARAM = 1e7 # softening parameter
 
 
-def drawText(text, x, y):
-    textSurface = font.render(text, False, WHITE)
-    screen.blit(textSurface, (x, y))
+state = np.zeros((BODIES, 4)) # x, y, vx, vy for each body
+bodies = []
+for i in range(BODIES):
+    # set random positions (m) and velocities (m s^-1)
+    x = np.random.randint(-1e9, 1e9)
+    y = np.random.randint(-1e9, 1e9)
+    vx = np.random.randint(-1e3, 1e3)
+    vy = np.random.randint(-1e3, 1e3)
+    state[i] = [x, y, vx, vy]
+    bodies.append(Body(np.array([x, y], dtype=float), np.array([vx, vy], dtype=float), MASS, RADIUS))
 
-def checkCollision(body1, body2):
-    dist = body1.pos.distance_to(body2.pos)
-    if dist < 10:
-        return True
-    return
+def gforce(m1, m2, r):
+    # calculate gravitational force between two bodies
+    return G * m1 * m2 / (r ** 2 + SOFT_PARAM ** 2)
 
-while running:
-    # event polling
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            print('mouse down')
-            curPos = pygame.mouse.get_pos()
-            bodies.append(Body(pygame.Vector2(pygame.mouse.get_pos()), pygame.Vector2(0, 0), pygame.Vector2(0, 0)))
-        if event.type == pygame.MOUSEBUTTONUP:
-            print('mouse up')
-            newPos = pygame.mouse.get_pos()
-            bodies[-1].vel = pygame.Vector2(curPos[0] - newPos[0], curPos[1] - newPos[1])
-            print(f'vel: {bodies[-1].vel}')
+def simulate(bodies, tstep, sim_len):
+    simulation = [np.array([body.pos for body in bodies])]
+    for k in range(sim_len):
+        for i in bodies:
+            for j in bodies:
+                if i != j:
+                    # calculate norm of distance vector
+                    r = np.linalg.norm(j.pos - i.pos)
+                    if r == 0:
+                        continue
+                    norm_r = (j.pos - i.pos) / r
+                    # calculate gravitational force
+                    f = gforce(i.mass, j.mass, r)
+                    # calculate acceleration
+                    acc = f / i.mass
+                    # update velocities for body i
+                    i.vel += acc * norm_r * tstep
+                    #state[i, 2:] += acc * (state[j, :2] - state[i, :2]) / r
+            i.pos += i.vel * tstep
+        if k % 10 == 0:
+            print(f"{k*100/sim_len}% done")
+        simulation.append(np.array([body.pos for body in bodies]))
+    return np.array(simulation)
 
-    screen.fill(BLACK)
+scale = 1e-6
+bound = 1e9*scale
+simulation = simulate(bodies, TSTEP, SIM_LEN)
 
-    # update and draw bodies
-    for body in bodies:
-        if body.pos[0] < -1000 or body.pos[0] > 1000 or body.pos[1] < -1000 or body.pos[1] > 1000:
-            bodies.remove(body)
-            continue
-        # calculate gravitational force to every other body and update acceleration
-        body.acc = pygame.Vector2(0, 0)	
-        for otherBody in bodies:
-            
-            if body != otherBody:
-                # calculate the direction vector
-                dirVec = otherBody.pos - body.pos
-                # calculate the distance between the two bodies
-                dist = dirVec.length()
-                # calculate the force
-                force = dirVec.normalize() * (G * body.mass * otherBody.mass) / (dist ** 2)
-                acc = force / body.mass
-                body.acc += acc
+fig = plt.figure()
+scatter = plt.scatter([], [], s=1, c='black', vmin=-1e1, vmax=1e1)
+ax = fig.get_axes()
+ax[0].set_xlim(-bound, bound)
+ax[0].set_ylim(-bound, bound)
+ax[0].set_title('500 bodies equal masses and radii')
+ax[0].set_xlabel('x (million km)')
+ax[0].set_ylabel('y (million km)')
 
-                if checkCollision(body, otherBody):
-                    body.pos.distance_to(otherBody.pos)
-                    bodies.remove(otherBody)
-                    bodies.remove(body)
-                    continue
-                
-        body.update(dt)
-        pygame.draw.circle(screen, WHITE, body.pos, math.log(body.mass, 10))
+plt.gca().set_aspect('equal', adjustable='box')
 
-    keys = pygame.key.get_pressed()
-    mouseState = pygame.mouse.get_pressed()
+def update(frame):
+    scatter.set_offsets(simulation[frame*SIM_SPEED]*scale)
+    return scatter,
+anim = animation.FuncAnimation(fig, update, frames=range(SIM_LEN//SIM_SPEED), interval=50, blit=True)
 
-    if mouseState[0] == 1:
-        # get the current mouse position
-        newPos = pygame.mouse.get_pos()
-        velVec = pygame.Vector2(curPos[0] - newPos[0], curPos[1] - newPos[1])
-        pygame.draw.line(screen, WHITE, curPos, pygame.Vector2(curPos[0] + velVec[0], curPos[1] + velVec[1]), 2)
-        drawText(str(round(velVec.length(), 2)) + "m/s", 10, 10)
-
-    drawText(str(round(clock.get_fps(), 1)), 10, 30)
-
-    pygame.display.flip()
-    # delta time since last frame in seconds
-    dt = clock.tick(60) / 1000
-
-pygame.quit()
+plt.show()
+plt.close()
