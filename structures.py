@@ -155,11 +155,11 @@ class Body:
         return (f'pos: {self.pos}, vel: {self.vel}, acc: {self.acc}, '
                 f'mass: {self.mass}, radius: {self.radius}')
 
-    def update(self, timestep):
+    def update(self, delta, timestep):
         """Updates the position and velocity of the body.
         """
-        self.vel += self.acc * timestep
-        self.pos += self.vel * timestep
+        self.vel += self.acc * delta * timestep
+        self.pos += self.vel * delta * timestep
 
     def density(self):
         """Returns the density of the body.

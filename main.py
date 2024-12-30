@@ -2,27 +2,30 @@ import matplotlib.pyplot as plt
 from matplotlib import animation, colors, colormaps
 import numpy as np
 from structures import Body, QuadTree
+import time
 
 # Simulation scale:
 # 1 pixel per million km
 # mass in kg
 
 # Test 1: simulation of 500 bodies with the same mass and radius
-TSTEP = 1e3 # 1 million seconds per step
-SIM_SPEED = 1 # 8 steps per frame
-SIM_LEN = 1000
+DELTA = 0.01 # 0.01 seconds per frame
+TSTEP = 5922 # 1 week per frame 
+SIM_SPEED = 1 # 1 steps per frame
+SIM_LEN = 200
 G = 6.67430e-11
-BODIES = 100
+BODIES = 50
 MASS = 1e24 # 1 septillion kg, roughly 1/5 of earth
 RADIUS = 1e6 # 1 million meters, roughly 1/6 of earth
 SOFT_PARAM = 1e7 # softening parameter
-LINE_TOGGLE = False
+TREE_UPDATE_FREQ = 10 # how many steps between quadtree updates
+LINE_TOGGLE = True
 
 def gforce(m1, m2, r):
     # calculate gravitational force between two bodies
     return G * m1 * m2 / (r ** 2 + SOFT_PARAM ** 2)
 
-def simulate(bodies, tstep, sim_len):
+def simulate(bodies, sim_len):
     simulation = [np.array([body.pos for body in bodies])]
     tree_ev = []
     for k in range(sim_len):
@@ -38,16 +41,23 @@ def simulate(bodies, tstep, sim_len):
                     f = gforce(i.mass, j.mass, r)
                     acc = f / i.mass
                     i.acc += r_dir * acc
-            i.update(tstep)
+            i.update(DELTA, TSTEP)
         if k % 10 == 0:
+            print("\033[H\033[J", end="")
             print(f"{k*100.0/float(sim_len)}% done")
         # update quadtree
-        quadtree = QuadTree([0, 0, 1e9, 1e9], 1, bodies)
+        if k % TREE_UPDATE_FREQ == 0:
+            # quadtree.clear()
+            # for body in bodies:
+            #     quadtree.insert(body)
+            quadtree = QuadTree([0, 0, 1e9, 1e9], 1, bodies)
         tree_ev.append(quadtree)
         simulation.append(np.array([body.pos for body in bodies]))
     return np.array(simulation), np.array(tree_ev)
 
-state = np.zeros((BODIES, 4)) # x, y, vx, vy for each body
+start_time = time.time()
+
+# create random bodies
 bodies = []
 for i in range(BODIES):
     # set random positions (m) and velocities (m s^-1)
@@ -55,13 +65,12 @@ for i in range(BODIES):
     y = np.random.randint(0, 1e9)
     vx = np.random.randint(-1e3, 1e3)
     vy = np.random.randint(-1e3, 1e3)
-    state[i] = [x, y, vx, vy]
     bodies.append(Body(np.array([x, y], dtype=float), np.array([vx, vy], dtype=float), MASS, RADIUS))
-quadtree = QuadTree([0, 0, 1e9, 1e9], 1, bodies)
 
 scale = 1e-6
 bound = 1e9*scale
-simulation, tree_ev = simulate(bodies, TSTEP, SIM_LEN)
+simulation, tree_ev = simulate(bodies, SIM_LEN)
+print(f'Last frame: {simulation[-1]}')
 
 fig = plt.figure()
 scatter = plt.scatter([], [], s=1, c='black', vmin=-1e1, vmax=1e1)
@@ -72,19 +81,18 @@ for tree in tree_ev:
 max_lines = max([len(lines) for lines in line_data])
 lines = [plt.plot([], [], 'r-')[0] for _ in range(max_lines)]
 
-# list of lines to be plotted
-# for x1, y1, x2, y2 in quadtree.lines():
-#     plt.plot([x1*scale, x2*scale], [y1*scale, y2*scale], 'r-')
 ax = fig.get_axes()
 ax[0].set_xlim(0, bound)
 ax[0].set_ylim(0, bound)
-#ax[0].set_title('500 bodies equal masses and radii')
+ax[0].set_title(f'{BODIES} bodies equal masses and radii')
 ax[0].set_xlabel('x (million km)')
 ax[0].set_ylabel('y (million km)')
 
 plt.gca().set_aspect('equal', adjustable='box') 
 
-print(lines)
+print('Simulation time:', time.time() - start_time)
+
+print('Creating animation...')
 
 if LINE_TOGGLE:
     def update(frame):
@@ -107,7 +115,14 @@ else:
         scatter.set_offsets(simulation[frame*SIM_SPEED]*scale)
         return [scatter]
 
-anim = animation.FuncAnimation(fig, update, frames=range(SIM_LEN//SIM_SPEED), interval=50, blit=True)
+print('Frames:', SIM_LEN//SIM_SPEED)
+print('Frames per second:', 1/(DELTA))
+print(f'Timescale: {TSTEP*(1/DELTA)} seconds per second')
+print('Animation length:', SIM_LEN//SIM_SPEED*50/1000, 'seconds')
+
+print('Total time:', time.time() - start_time)
+
+anim = animation.FuncAnimation(fig, update, frames=range(SIM_LEN//SIM_SPEED), interval=DELTA*1000, blit=True)
 
 plt.show()
 plt.close()
