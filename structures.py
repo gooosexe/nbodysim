@@ -13,11 +13,14 @@ class QuadTree:
     bodies: list
     children: list
 
-    def __init__(self, boundary, capacity):
+    def __init__(self, boundary, capacity, bodies=None):
         self.boundary = boundary
         self.capacity = capacity
         self.bodies = []
         self.children = []
+        if bodies is not None:
+            for body in bodies:
+                self.insert(body)
 
     def insert(self, body):
         """Inserts a body into the quadtree. 
@@ -102,6 +105,23 @@ class QuadTree:
         x, y, width, height = self.boundary
         return x < boundary[0] + boundary[2] and x + width > boundary[0] and y < boundary[1] + boundary[3] and y + height > boundary[1]
     
+    def lines(self):
+        """Returns a list of lines that represent the boundaries of the quadtree.
+        """
+        x, y, width, height = self.boundary
+        if len(self.children) == 0:
+            lines = []
+            lines.append([x, y, x + width, y])
+            lines.append([x, y, x, y + height])
+            lines.append([x + width, y, x + width, y + height])
+            lines.append([x, y + height, x + width, y + height])
+            return lines
+        else:
+            lines = []
+            for child in self.children:
+                lines.extend(child.lines())
+            return lines
+
     def clear(self):
         """Clears the quadtree.
         """
@@ -121,7 +141,7 @@ class Body:
     """
     pos: np.array
     vel: np.array
-    acc = np.array([0, 0])
+    acc = np.array([0.0, 0.0])
     mass: np.float64
     radius: np.float64
 
@@ -135,15 +155,13 @@ class Body:
         return (f'pos: {self.pos}, vel: {self.vel}, acc: {self.acc}, '
                 f'mass: {self.mass}, radius: {self.radius}')
 
-    def update(self, delta, timestep):
+    def update(self, timestep):
         """Updates the position and velocity of the body.
         """
-        self.vel += self.acc * delta * timestep
-        self.pos += self.vel * delta * timestep
+        self.vel += self.acc * timestep
+        self.pos += self.vel * timestep
 
-    def render(self):
-        """Renders the body on the screen.
-        Radius is the base 10 log of the mass.
-        Rendered position is the actual position divided by 1 billion.
-        Place 0, 0 at the center of the screen.
+    def density(self):
+        """Returns the density of the body.
         """
+        return self.mass / (4 / 3 * np.pi * self.radius ** 3)
