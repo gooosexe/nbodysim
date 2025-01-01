@@ -12,6 +12,7 @@ class QuadTree:
     capacity: int
     bodies: list
     children: list
+    center_mass: np.array
 
     def __init__(self, boundary, capacity, bodies=None):
         self.boundary = boundary
@@ -21,6 +22,16 @@ class QuadTree:
         if bodies is not None:
             for body in bodies:
                 self.insert(body)
+        # center of mass
+        x, y, width, height = self.boundary
+        self.center_mass = np.array([0.0, 0.0])
+        for body in self.bodies:
+            self.center_mass += body.pos * body.mass
+        total_mass = self.get_total_mass()
+        if total_mass != 0:
+            self.center_mass /= sum([body.mass for body in self.bodies])
+        else:
+            self.center_mass = np.array([x + width // 2, y + height // 2], dtype=np.float64)
 
     def insert(self, body):
         """Inserts a body into the quadtree. 
@@ -82,7 +93,7 @@ class QuadTree:
                 child.query(boundary, found)
         return found
     
-    def count(self):
+    def count(self) -> int:
         """Returns the number of boxes in the quadtree.
         """
         if len(self.children) == 0:
@@ -93,13 +104,13 @@ class QuadTree:
                 count += child.count()
             return count
     
-    def contains(self, body):
+    def contains(self, body) -> bool:
         """Returns whether the quadtree node contains the body.
         """
         x, y, width, height = self.boundary
         return x <= body.pos[0] < x + width and y <= body.pos[1] < y + height
     
-    def intersects(self, boundary):
+    def intersects(self, boundary) -> bool:
         """Returns whether the quadtree node intersects with the boundary.
         """
         x, y, width, height = self.boundary
@@ -121,7 +132,35 @@ class QuadTree:
             for child in self.children:
                 lines.extend(child.lines())
             return lines
-
+    
+    def get_bodies(self) -> list:
+        """Returns a list of bodies in the quadtree.
+        """
+        if len(self.children) == 0:
+            return self.bodies
+        else:
+            bodies = []
+            for child in self.children:
+                bodies.extend(child.return_bodies())
+            return bodies
+    
+    def get_total_mass(self) -> np.float64:
+        """Returns the total mass of the bodies in the quadtree.
+        """
+        mass = 0
+        for body in self.bodies:
+            mass += body.mass
+        return mass
+    
+    def get_ratio(self, body) -> np.float64:
+        """Returns the ratio of the node's width to the distance from the center of mass to the body.
+        """
+        x, y, width, height = self.boundary
+        r = np.linalg.norm(self.center_mass - body.pos)
+        if r == 0:
+            return 0
+        return width / np.linalg.norm(self.center_mass - body.pos)
+    
     def clear(self):
         """Clears the quadtree.
         """
