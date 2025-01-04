@@ -32,7 +32,7 @@ class QuadTree:
             self.center_mass /= sum([body.mass for body in self.bodies])
         else:
             self.center_mass = np.array([x + width // 2, y + height // 2], dtype=np.float64)
-
+    
     def insert(self, body):
         """Inserts a body into the quadtree. 
         If the number of bodies in the node exceeds the capacity, the node is subdivided into 4 children.
@@ -160,6 +160,16 @@ class QuadTree:
         if r == 0:
             return 0
         return width / np.linalg.norm(self.center_mass - body.pos)
+
+    def find_node(self, body):
+        """Returns the node that contains the body.
+        """
+        if self.contains(body):
+            for child in self.children:
+                if child.contains(body):
+                    return child.find_node(body)
+            return self
+        return None
     
     def clear(self):
         """Clears the quadtree.

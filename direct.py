@@ -12,9 +12,9 @@ import time
 DELTA = 0.01 # 0.01 seconds per frame
 TSTEP = 59220 # 10 week per frame 
 SIM_SPEED = 1 # 1 steps per frame
-SIM_LEN = 1000
+SIM_LEN = 2000
 G = 6.67430e-11
-BODIES = 500
+BODIES = 25 
 MASS = 1e24 # 1 septillion kg, roughly 1/5 of earth
 RADIUS = 1e6 # 1 million meters, roughly 1/6 of earth
 SOFT_PARAM = 1e7 # softening parameter
@@ -24,13 +24,28 @@ def gforce(m1, m2, r):
     # calculate gravitational force between two bodies
     return G * m1 * m2 / (r ** 2 + SOFT_PARAM ** 2)
 
+def collide(body1, body2):
+    if np.linalg.norm(body1.pos - body2.pos) < body1.radius + body2.radius:
+        body1.vel = (body1.vel * body1.mass + body2.vel * body2.mass) / (body1.mass + body2.mass)
+        body1.mass += body2.mass
+        body1.radius = (body1.radius ** 3 + body2.radius ** 3) ** (1/3)
+        body2.mass = 0
+        body2.radius = 0
+        return True
+    return False
+
 def simulate(bodies, sim_len):
-    simulation = [np.array([body.pos for body in bodies])]
+    positions = [np.array([body.pos for body in bodies])]
+    radii = [np.array([body.radius for body in bodies])]
     for k in range(sim_len):
+        to_remove = []
         for i in bodies:
             i.acc = np.array([0.0, 0.0])
             for j in bodies:
                 if i != j:
+                    if collide(i, j):
+                        to_remove.append(j)
+                        continue
                     r = np.linalg.norm(j.pos - i.pos)
                     # if bodies are at the same position, skip
                     if r == 0:
@@ -40,12 +55,23 @@ def simulate(bodies, sim_len):
                     acc = f / i.mass
                     i.acc += r_dir * acc
             i.update(DELTA, TSTEP)
+        
+        bodies = [i for i in bodies if i not in to_remove]
+
         if k % 10 == 0:
-            print("\033[H\033[J", end="")
+            #print("\033[H\033[J", end="")
             print(f"{k*100.0/float(sim_len)}% done")
-        # update quadtree
-        simulation.append(np.array([body.pos for body in bodies]))
-    return np.array(simulation)
+        pos = np.zeros((BODIES, 2))
+        rad = np.zeros(BODIES)
+        for i in range(len(bodies)):
+            pos[i] = bodies[i].pos
+            rad[i] = bodies[i].radius
+        positions.append(pos)
+        radii.append(rad)
+        if np.all(positions == positions[0]):
+            print(f'Bodies: {bodies}')
+            break
+    return np.array(positions), np.array(radii)
 
 start_time = time.time()
 
@@ -61,10 +87,12 @@ for i in range(BODIES):
 
 scale = 1e-6
 bound = 1e9*scale
-simulation = simulate(bodies, SIM_LEN)
+positions, radii = simulate(bodies, SIM_LEN)
+print(radii)
+print(positions)
 
 fig = plt.figure()
-scatter = plt.scatter([], [], s=1, c='black', vmin=-1e1, vmax=1e1)
+scatter = plt.scatter([pos[0] for pos in positions[0]], [pos[1] for pos in positions[0]], s=np.full(BODIES, RADIUS*scale), c='black', vmin=-1e1, vmax=1e1)
 
 ax = fig.get_axes()
 ax[0].set_xlim(0, bound)
@@ -80,7 +108,8 @@ print('Simulation time:', time.time() - start_time)
 print('Creating animation...')
 
 def update(frame):
-    scatter.set_offsets(simulation[frame*SIM_SPEED]*scale)
+    scatter.set_offsets(positions[frame*SIM_SPEED] * scale)
+    scatter.set_sizes(radii[frame*SIM_SPEED] * scale)
     return [scatter]
 
 print('Frames:', SIM_LEN//SIM_SPEED)

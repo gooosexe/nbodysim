@@ -11,17 +11,17 @@ import time
 # Test 1: simulation of 500 bodies with the same mass and radius
 DELTA = 0.01 # 0.01 seconds per frame
 TSTEP = 59220 # 10 week per frame 
-SIM_SPEED = 1 # 1 steps per frame
+SIM_SPEED = 1# 1 steps per frame
 SIM_LEN = 1000
 G = 6.67430e-11
 BODIES = 500 
 MASS = 1e24 # 1 septillion kg, roughly 1/5 of earth
 RADIUS = 1e6 # 1 million meters, roughly 1/6 of earth
 SOFT_PARAM = 1e7 # softening parameter
-TREE_UPDATE_FREQ = 10 # how many steps between quadtree updates
+TREE_UPDATE_FREQ = 5 # how many steps between quadtree updates
 LINE_TOGGLE = False
-NODE_DISTANCE_RATIO = 0.5
-BODY_LIMIT = 2
+NODE_DISTANCE_RATIO = 1 
+BODY_LIMIT = 1
 
 def gforce(m1, m2, vec_r):
     # calculate gravitational force between two bodies
@@ -44,6 +44,15 @@ def calculate_total_force(body, quadtree):
             force += calculate_total_force(body, child)
         return force
     
+
+def collide(body1, body2):
+    if np.linalg.norm(body1.pos - body2.pos) < body1.radius + body2.radius:
+        body1.vel = (body1.vel * body1.mass + body2.vel * body2.mass) / (body1.mass + body2.mass)
+        body1.mass += body2.mass
+        body1.radius = (body1.radius ** 3 + body2.radius ** 3) ** (1/3)
+        return True
+    return False
+
 
 def simulate(bodies, sim_len):
     simulation = [np.array([body.pos for body in bodies])]
@@ -87,12 +96,12 @@ simulation, tree_ev = simulate(bodies, SIM_LEN)
 
 fig = plt.figure()
 scatter = plt.scatter([], [], s=1, c='black', vmin=-1e1, vmax=1e1)
-line_data = []
-for tree in tree_ev:
-    line_data.append(tree.lines())
-
-max_lines = max([len(lines) for lines in line_data])
-lines = [plt.plot([], [], 'r-')[0] for _ in range(max_lines)]
+if LINE_TOGGLE:
+    line_data = []
+    for tree in tree_ev:
+        line_data.append(tree.lines())
+    max_lines = max([len(lines) for lines in line_data])
+    lines = [plt.plot([], [], 'r-')[0] for _ in range(max_lines)]
 
 ax = fig.get_axes()
 ax[0].set_xlim(0, bound)
